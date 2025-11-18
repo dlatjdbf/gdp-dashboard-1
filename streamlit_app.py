@@ -1,40 +1,92 @@
 import streamlit as st
-import requests
-import base64
-import json
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.applications.mobilenet_v2 import preprocess_input, decode_predictions
+from tensorflow.keras.preprocessing import image
+from PIL import Image
+import numpy as np
 
-uploaded_file = st.file_uploader("음식 또는 음료 사진을 업로드하세요", type=["jpg", "png", "jpeg"])
+# -------------------------------
+# 기본 설정
+# -------------------------------
+st.set_page_config(page_title="AI 카페인 분석기 ☕", layout="centered")
+st.title("🤖 AI 카페인 분석기 (무료 인공지능 버전)")
+
+st.markdown("""
+이 AI는 **MobileNetV2 딥러닝 모델**을 기반으로 작동합니다.  
+사진을 업로드하면 음식의 종류를 예측하고,  
+카페인 함유 가능성을 알려줍니다.
+""")
+
+# -------------------------------
+# 카페인 데이터베이스
+# -------------------------------
+CAFFEINE_DB = {
+    "coffee": 120,
+    "espresso": 150,
+    "latte": 90,
+    "tea": 25,
+    "green_tea": 30,
+    "cola": 34,
+    "chocolate": 9,
+    "energy_drink": 80,
+    "matcha": 70,
+    "americano": 95,
+    "black_tea": 45
+}
+
+# -------------------------------
+# 모델 불러오기
+# -------------------------------
+@st.cache_resource
+def load_model():
+    model = MobileNetV2(weights="imagenet")
+    return model
+
+model = load_model()
+
+# -------------------------------
+# 업로드 이미지 입력
+# -------------------------------
+uploaded_file = st.file_uploader("📸 음식 또는 음료 사진을 업로드하세요", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
-    st.image(uploaded_file, caption="업로드한 이미지", use_container_width=True)
-    img_bytes = uploaded_file.read()
-    img_base64 = base64.b64encode(img_bytes).decode("utf-8")
+    img = Image.open(uploaded_file).convert("RGB")
+    st.image(img, caption="업로드한 이미지", use_container_width=True)
 
-    # ✅ 안전한 방식으로 API 키 불러오기
-    headers = {"Authorization": f"Bearer {st.secrets['OPENAI_API_KEY']}"}
+    # 이미지 전처리
+    img = img.resize((224, 224))
+    x = image.img_to_array(img)
+    x = np.expand_dims(x, axis=0)
+    x = preprocess_input(x)
 
-    url = "https://api.openai.com/v1/chat/completions"
-    payload = {
-        "model": "gpt-4o-mini",  # 이미지 입력 지원 모델
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "이 사진 속 음식 또는 음료의 종류를 인식하고, 카페인 함유 여부와 예상 함량을 알려줘."},
-                    {"type": "image_url", "image_url": f"data:image/jpeg;base64,{img_base64}"}
-                ]
-            }
-        ]
-    }
+    # -------------------------------
+    # AI 예측 수행
+    # -------------------------------
+    with st.spinner("AI가 이미지를 분석 중입니다... 🔍"):
+        preds = model.predict(x)
+        decoded = decode_predictions(preds, top=3)[0]
 
-    with st.spinner("AI가 분석 중입니다..."):
-        response = requests.post(url, headers=headers, json=payload)
-        result_json = response.json()
+    st.subheader("🔍 AI 예측 결과 (상위 3개)")
+    for i, (id_, label, prob) in enumerate(decoded):
+        st.write(f"{i+1}. {label} — {prob*100:.2f}%")
 
-    if "choices" in result_json:
-        st.success("AI 분석 결과")
-        st.write(result_json["choices"][0]["message"]["content"])
+    # -------------------------------
+    # 카페인 예측 로직
+    # -------------------------------
+    predicted_label = decoded[0][1].lower()
+    caffeine_value = None
+    matched_key = None
+
+    for key in CAFFEINE_DB:
+        if key in predicted_label:
+            caffeine_value = CAFFEINE_DB[key]
+            matched_key = key
+            break
+
+    st.markdown("---")
+    if caffeine_value:
+        st.success(f"☕ **{matched_key.capitalize()}** 로 인식되었습니다. 예상 카페인 함량은 약 **{caffeine_value}mg** 입니다.")
     else:
-        st.error("API 오류 발생")
-        st.json(result_json)
-
+        st.info("💧 카페인이 포함되지 않은 음식일 가능성이 높습니다.")
+else:
+    st.info("사진을 업로드하면 AI가 자동으로 분석합니다 ☕")
