@@ -1,92 +1,81 @@
 import streamlit as st
-from tensorflow.keras.applications import MobileNetV2
-from tensorflow.keras.applications.mobilenet_v2 import preprocess_input, decode_predictions
-from tensorflow.keras.preprocessing import image
-from PIL import Image
-import numpy as np
 
-# -------------------------------
-# 기본 설정
-# -------------------------------
-st.set_page_config(page_title="AI 카페인 분석기 ☕", layout="centered")
-st.title("🤖 AI 카페인 분석기 (무료 인공지능 버전)")
+st.subheader("카페인 섭취 습관 자가 점검")
 
-st.markdown("""
-이 AI는 **MobileNetV2 딥러닝 모델**을 기반으로 작동합니다.  
-사진을 업로드하면 음식의 종류를 예측하고,  
-카페인 함유 가능성을 알려줍니다.
-""")
+st.caption(
+    "이 설문은 전문 의료 지식을 바탕으로 한 진단 검사가 아니라, "
+    "카페인 섭취 습관을 점검하기 위한 임시적 검사입니다. "
+    "의학적 판단이나 진단의 근거로 사용해서는 안 되며, 참고 지표로만 활용하십시오."
+)
 
-# -------------------------------
-# 카페인 데이터베이스
-# -------------------------------
-CAFFEINE_DB = {
-    "coffee": 120,
-    "espresso": 150,
-    "latte": 90,
-    "tea": 25,
-    "green_tea": 30,
-    "cola": 34,
-    "chocolate": 9,
-    "energy_drink": 80,
-    "matcha": 70,
-    "americano": 95,
-    "black_tea": 45
+questions = [
+    "아침에 카페인을 섭취하지 않으면 하루를 시작하기 어렵다.",
+    "같은 각성 효과를 느끼기 위해 카페인 섭취량이 늘었다고 느낀다.",
+    "카페인을 섭취하지 않으면 두통이나 심한 피로를 느낀다.",
+    "카페인 섭취를 줄이려 했지만 실패한 경험이 있다.",
+    "피곤하지 않아도 습관적으로 카페인 음료를 찾는다.",
+    "카페인 섭취 후 심장이 빨리 뛰거나 손이 떨린 적이 있다.",
+    "카페인을 마신 날은 수면의 질이 떨어진다.",
+    "오후나 저녁에도 각성을 위해 카페인을 섭취한다.",
+    "카페인을 마시지 않으면 예민해지거나 기분이 가라앉는다.",
+    "특별한 필요가 없어도 카페인을 섭취한다.",
+    "하루 카페인 섭취량을 정확히 알지 못한다.",
+    "카페인을 마셔도 피로가 완전히 해소되지 않는다.",
+    "카페인 없이는 집중하기 어렵다.",
+    "불편함을 느끼면서도 카페인 섭취를 계속한다.",
+    "카페인을 대체할 다른 방법을 거의 시도하지 않는다."
+]
+
+options = {
+    "전혀 아니다": 0,
+    "가끔 그렇다": 1,
+    "자주 그렇다": 2,
+    "거의 항상 그렇다": 3
 }
 
-# -------------------------------
-# 모델 불러오기
-# -------------------------------
-@st.cache_resource
-def load_model():
-    model = MobileNetV2(weights="imagenet")
-    return model
+total_score = 0
 
-model = load_model()
+for i, q in enumerate(questions):
+    answer = st.radio(
+        f"{i+1}. {q}",
+        options.keys(),
+        key=f"q_{i}"
+    )
+    total_score += options[answer]
 
-# -------------------------------
-# 업로드 이미지 입력
-# -------------------------------
-uploaded_file = st.file_uploader("📸 음식 또는 음료 사진을 업로드하세요", type=["jpg", "jpeg", "png"])
-
-if uploaded_file:
-    img = Image.open(uploaded_file).convert("RGB")
-    st.image(img, caption="업로드한 이미지", use_container_width=True)
-
-    # 이미지 전처리
-    img = img.resize((224, 224))
-    x = image.img_to_array(img)
-    x = np.expand_dims(x, axis=0)
-    x = preprocess_input(x)
-
-    # -------------------------------
-    # AI 예측 수행
-    # -------------------------------
-    with st.spinner("AI가 이미지를 분석 중입니다... 🔍"):
-        preds = model.predict(x)
-        decoded = decode_predictions(preds, top=3)[0]
-
-    st.subheader("🔍 AI 예측 결과 (상위 3개)")
-    for i, (id_, label, prob) in enumerate(decoded):
-        st.write(f"{i+1}. {label} — {prob*100:.2f}%")
-
-    # -------------------------------
-    # 카페인 예측 로직
-    # -------------------------------
-    predicted_label = decoded[0][1].lower()
-    caffeine_value = None
-    matched_key = None
-
-    for key in CAFFEINE_DB:
-        if key in predicted_label:
-            caffeine_value = CAFFEINE_DB[key]
-            matched_key = key
-            break
-
+if st.button("결과 확인"):
     st.markdown("---")
-    if caffeine_value:
-        st.success(f"☕ **{matched_key.capitalize()}** 로 인식되었습니다. 예상 카페인 함량은 약 **{caffeine_value}mg** 입니다.")
+    st.subheader("점검 결과")
+
+    st.write(f"총점: {total_score} / 45점")
+
+    if total_score <= 8:
+        st.success(
+            "카페인 의존 위험 매우 낮음\n\n"
+            "현재 카페인 섭취가 생활에 큰 영향을 주지 않는 상태입니다."
+        )
+    elif total_score <= 16:
+        st.info(
+            "카페인 의존 위험 낮음\n\n"
+            "일부 상황에서 습관적 섭취가 나타나지만 전반적으로 안정적입니다."
+        )
+    elif total_score <= 24:
+        st.warning(
+            "카페인 의존 위험 주의 단계\n\n"
+            "카페인이 집중력과 생활 리듬에 영향을 주기 시작한 상태입니다."
+        )
+    elif total_score <= 32:
+        st.error(
+            "카페인 의존 위험 높음\n\n"
+            "섭취 조절이 필요하며 수면과 컨디션에 부정적 영향이 나타날 수 있습니다."
+        )
     else:
-        st.info("💧 카페인이 포함되지 않은 음식일 가능성이 높습니다.")
-else:
-    st.info("사진을 업로드하면 AI가 자동으로 분석합니다 ☕")
+        st.error(
+            "카페인 의존 위험 매우 높음\n\n"
+            "카페인에 대한 신체적 적응이 상당히 진행되었을 가능성이 있습니다."
+        )
+
+    st.caption(
+        "※ 본 결과는 참고용이며, 증상이 지속되거나 일상에 지장을 준다면 "
+        "전문가 상담을 권장합니다."
+    )
